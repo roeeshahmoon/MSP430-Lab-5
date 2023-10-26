@@ -1,0 +1,256 @@
+#include "bsp.h"
+
+Lcd_data     MACRO com
+             call   #Delay5ms
+             mov.b  #0, LCDData
+             bis.b  #0x40, LCDControl
+             mov.b  com, LCDData
+             call   #Lcd_strobe
+             bic.b  #0x40, LCDControl
+             ENDM
+
+
+
+Lcd_cmd      MACRO command
+             call   #Delay5ms
+             mov.b command, LCDData
+             call  #Lcd_strobe
+             ENDM
+                        
+             
+                         
+;----------Port -> output --------------
+
+        MODULE HAL
+        PUBLIC SysConfig,ReadPBs,bdelay,PORT2_ISR,TA0_ISR,TAIntEnable,TA1_ISR,LCD_clear
+        PUBLIC LCD_Init,Lcd_strobe,Delay5ms,WriteLCD,PrintHeader,TA1IntEnable,TA1IE
+        EXTERN GPIOConfig,state,TimerAConf,sec1,sec2,minute,TimerA1Conf
+        RSEG CODE
+
+;----------LCD Driver Config --------------
+Lcd_strobe  bis.b  #0x20, LCDControl 
+            nop
+            nop
+            bic.b  #0x20, LCDControl
+            ret
+
+
+LCD_Init     bic.b   #0xE0, LCDControl   ; clear control
+             call   #Delay15ms
+             mov.b   #0x3F, LCDData
+             call   #Lcd_strobe
+             call   #Delay5ms
+             mov.b   #0x3F, LCDData
+             call    #Lcd_strobe
+             call   #Delay200us
+             mov.b   #0x3F, LCDData
+             call    #Lcd_strobe    
+             Lcd_cmd #0x3C
+             Lcd_cmd #0x0F
+             Lcd_cmd #0x01
+             Lcd_cmd #0x06
+             Lcd_cmd #0x80
+             Lcd_cmd #0x02
+             
+             ret
+LCD_clear
+             call #LCD_Init ;clear lcd
+             Lcd_cmd #0x01
+             Lcd_cmd #0x0C
+             ret
+          
+;----------System Config --------------
+
+SysConfig  call #GPIOConfig
+           call #TimerAConf
+           call #TimerA1Conf
+           ret
+             
+             
+;----------------------------Measured Freq------------------------------
+
+PrintHeader    
+                Lcd_cmd #0x01         ;LCD Clear 
+                Lcd_cmd #0x02          ;Cursor to first line 
+                Lcd_data #0x52    ;R
+                Lcd_data #0x75    ;u
+                Lcd_data #0x6E    ;n
+                Lcd_cmd #0x14           ;Cursor Right
+                Lcd_data #'T'
+                Lcd_data #'i'
+                Lcd_data #'m'
+                Lcd_data #'e'
+                Lcd_cmd #0xC0           ;Cursor to second line          
+                Lcd_data #'v'
+                Lcd_data #'a'
+                Lcd_data #'l'
+                Lcd_data #'u'
+                Lcd_data #'e'
+                Lcd_cmd #0x14
+                ret
+
+
+
+;------------------------------------------------------------------------------
+Delay200us  mov.w  #700,R4
+Lu200        dec.w  R4
+            jnz    Lu200
+            ret
+;------------------------------------------------------------------------------
+Delay5ms    mov.w  #1750,R4
+Lm5          dec.w  R4
+            jnz    Lm5
+            ret
+;------------------------------------------------------------------------------
+Delay15ms   mov.w  #5250,R4
+Lm15         dec.w  R4
+            jnz    Lm15
+            ret 
+
+
+;----------Read PBs - function without arg and no return value -------
+
+ReadPBs   pop R4 ;save ret address
+          
+          mov.b PBsArrPort,R5 ; func body
+          
+          xor.b #0x03,R5 ;masking
+          push.b R5 ; func end
+          
+          push R4
+          ret
+
+
+;----------  TACCR0 interrupt enabled   --------------
+
+TAIntEnable      bis.w   #CCIE,TA0CC
+                 bis.w   #CPUOFF+GIE,SR ;LMP0
+
+                 ret
+                 
+;----------  TACCR0 interrupt disabled   --------------
+
+TAIntDisable     bic.w   #CCIE,TA0CC
+                 ret
+                 
+                  
+                 
+;----------  TA1CCR2 interrupt enabled   --------------                 
+
+TA1IntEnable     bis.w #CCIE,TA1CC2
+                 ret
+
+;----------  TA1IE interrupt enabled   --------------
+
+TA1IE  
+             bis.w #CCIE,TA1CC2
+             bis.w   #CPUOFF+GIE,SR
+
+             ret
+      
+;----------Timer A funcs  --------------
+
+WriteLCD    
+             Lcd_cmd #0x02
+             Lcd_data #48 ;0
+             Lcd_data minute ;0
+             Lcd_data #58 ;:
+             Lcd_data sec2 ;0
+             Lcd_data sec1 ;0
+             Lcd_cmd #0x0C
+             ret
+
+;----------Timer A0 Interrupt  --------------
+
+TA0_ISR
+             cmp.b  #50 ,minute    ;check 2 minutes
+             jnz L1
+             call #TAIntDisable
+             reti 
+             
+L1           cmp.b  #53 ,sec2    ;check 1 minutes
+             jnz incSing
+             cmp.b  #57, sec1
+             jnz incSing
+             jz incMinutes
+             
+           
+             cmp.b  #48 ,minute    ;check 0 minutes 
+             jz incSing 
+                    
+incSing      cmp.b #57,sec1 
+             jz incDozens
+             inc.b sec1
+             call  #WriteLCD
+             reti
+             
+             
+incDozens    cmp.b #53,sec1
+             jz incMinutes
+             mov.b #0x30, sec1  ;put zero in hex
+             inc.b sec2
+             call #WriteLCD
+             reti
+             
+incMinutes   inc.b minute
+             mov.b #0x30, sec1  ;put zero in hex
+             mov.b #0x30, sec2   ;put zero in hex
+             call #WriteLCD
+             reti
+             
+
+;----------Timer A1 Interrupt  --------------
+//PrintHeader
+TA1_ISR      
+
+                reti
+
+;----------Bounce Delay  --------------
+
+bdelay   pop R4 ;save address
+         pop R5 ; get delay val
+
+L        dec.w R5 ;start
+         jnz L    ;end
+         
+         push R4  
+         ret
+         
+;----------ISR - Port 2  --------------
+
+PORT2_ISR  push.b #debounceValUP
+           call #bdelay
+           bic.w #CCIE,TA0CC
+           
+           bit.b #0x01,PBsArrIntPend
+           jnz P2_0
+           bit.b #0x02,PBsArrIntPend
+           jnz P2_1
+
+           jmp exitLPM0
+           
+
+P2_0       mov #1,state ;inf reset
+           bic.b #0x01,PBsArrIntPend
+           jmp exitLPM0
+           
+P2_1       mov #2,state ;inf reset
+           bic.b #0x02,PBsArrIntPend
+           jmp exitLPM0
+           
+;P2_2       mov #3,state
+;           bic.b #0x04,PBsArrIntPend
+;           jmp exitLPM0
+           
+;P2_3      mov #4,state
+;          bic.b #0x08,PBsArrIntPend
+;          jmp exitLPM0
+
+exitLPM0  bic #CPUOFF,0(SP) ;Exit sleep
+          bic.b #0xFF,PBsArrIntPend    
+          reti
+
+
+        ENDMOD
+              
+        END

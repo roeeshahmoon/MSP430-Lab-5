@@ -1,0 +1,22 @@
+#include "bsp.h"
+
+        MODULE API
+        PUBLIC LCD_reset 
+        EXTERN state,Delay5ms,Lcd_strobe,LCD_Init,sec1,sec2,minute,TAConfig,WriteLCD,TAIntEnable,PrintHeader
+        EXTERN TA1IntEnable,TA1IE,
+        RSEG CODE
+
+
+             
+LCD_reset        
+             mov.b #48,minute
+             mov.b #48,sec1
+             mov.b #48,sec2
+             call #LCD_Init
+             call #WriteLCD
+             bis.w   #CCIE,TA0CC
+             call #TAIntEnable      ;bis.w   #CCIE,&TACCTL0 ; TACCR0 interrupt enabled 
+             bis.w   #CPUOFF+GIE,SR ; sleep 
+             ret
+
+             END

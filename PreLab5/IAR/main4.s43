@@ -1,0 +1,61 @@
+#include "bsp.h"
+           
+             NAME Main
+             PUBLIC state,sec1,sec2,minute
+             EXTERN SysConfig,PORT2_ISR,TA0_ISR,LCD_reset,TA1_ISR
+             EXTERN LCD_clear,Tic
+;---------------------------------------------------------------------------             
+             ORG 0200h       ; Begin of RAM seg
+;---------------------------------------------------------------------------
+state        DW   0
+sec1         DW   0
+sec2         DW   0
+minute       DW   0
+
+             RSEG CSTACK
+             RSEG CODE         
+;-----------------------------------------------------------------
+             ;ORG 0C00h ;Program Reset
+;--------------------------------------------------------------
+Main        mov.w   #SFE(CSTACK),SP
+StopWDT     mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; Stop WDT    
+
+            call    #SysConfig
+;-----------------------------------------------------------------
+             ;FSM Loop
+;--------------------------------------------------------------
+             
+state0       cmp     #0,state         ;check if state0           
+             jnz     state1
+             call    #LCD_clear
+             bis.w   #CPUOFF+GIE,SR ;LMP0
+             nop
+             
+state1       cmp     #1,state         ;check if state1
+             jnz     state2
+             call    #LCD_reset
+            
+             
+state2       cmp     #2,state         ;check if state2
+             jnz     L0
+             call    #LCD_reset
+            // call    #Tic
+             
+
+L0           mov     #0,state
+             jmp     state0 ;idle
+             nop
+
+
+
+;-------------------------------------------------------------------------------------------------------------------------------------------
+            COMMON  INTVEC
+            ORG     PORT2_VECTOR            ;PORT2 Interrupt Vector
+            DW      PORT2_ISR
+            ORG     TIMER0_A0_VECTOR         
+            DW      TA0_ISR
+            ORG     TIMER1_A1_VECTOR       
+            DW      TA1_ISR
+            ORG     RESET_VECTOR            ; MSP430 RESET Vector
+            DW      Main                   
+            END

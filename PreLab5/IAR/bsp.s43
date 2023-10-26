@@ -1,0 +1,46 @@
+#include "bsp.h"
+
+;----------P1&P2 SetUps--------------
+
+        MODULE BSP
+        PUBLIC GPIOConfig,TimerAConf,TimerA1Conf
+        RSEG CODE
+
+GPIOConfig
+          bic.b   #0xFF,LCDsDataSel ;P1 GPIO
+          bis.b   #0xFF,LCDsDataDir ; P1 output  
+          
+          
+          bic.b   #0xE0,LCDsControlSel ;P2.5-7 GPIO
+          bis.b   #0xE0,DynScopeDir ;P2.5-7 output
+          
+          ;bis.b 2.4
+          bis.b   #0x08,DynScopeSel ;P2.4 timer    P2.3 for real lab
+          bic.b   #0x10,DynScopeDir ;P2.4 input         
+          
+          bic.b   #0x03,PBsArrPortSel ; P2.0-P2.1 I/O
+          bic.b   #0x03,PBsArrPortDir ; P2.0-P2.1 input
+          bic.b   #0x03,PBsArrIntEdgeSel ; all rising
+          bis.b   #0x03,PBsArrIntEdgeSel ; P2.0-P2.1 fall edge
+          bis.b   #0x03,PBsArrIntEn ; enable
+          bic.b   #0x03,PBsArrIntPend ; reset flag
+          ret
+
+
+TimerAConf
+             bic.w   #CCIE,TA0CC;   Timer A0 interrupt enabled
+             mov.w   #65535,TA0Count;  2^16 , up/down so 2^17 and divide by 8 so 1 sec in total
+             mov.w   #TASSEL_2+MC_3+ID_3,TimerA0CTL;TimerA0 ,smclk, up/down mode ,div 8
+          ret
+          
+TimerA1Conf
+          bis.w   #CCIFG,&TA1CCTL0
+          mov.w   #CM_1+SCS+CAP+CCIE,TA1CC2 ;capture on rising edges
+
+          ret
+
+
+
+
+          ENDMOD
+          END
